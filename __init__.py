@@ -23,64 +23,103 @@ bl_info = {
 from .inputs import devices
 
 import bpy
+from bpy.props import (StringProperty,
+                       BoolProperty,
+                       IntProperty,
+                       FloatProperty,
+                       FloatVectorProperty,
+                       EnumProperty,
+                       PointerProperty,
+                       )
+from bpy.types import (Panel,
+                       Menu,
+                       Operator,
+                       PropertyGroup,
+                       )
 
-class GamepadInputPanel(bpy.types.Panel):
+
+# ------------------------------------------------------------------------
+#    Scene Properties
+# ------------------------------------------------------------------------
+
+class GI_SceneProperties(PropertyGroup):
+
+    up: BoolProperty(
+        name="Up",
+        description="Up button on gamepad",
+        default = False
+        )
+    down: BoolProperty(
+        name="Down",
+        description="Down button on gamepad",
+        default = False
+        )
+    left: BoolProperty(
+        name="Left",
+        description="Left button on gamepad",
+        default = False
+        )
+    right: BoolProperty(
+        name="Right",
+        description="Right button on gamepad",
+        default = False
+        )
+
+    # my_float: FloatProperty(
+    #     name = "Float",
+    #     description = "Float Property",
+    #     default = 23.7,
+    #     min = 0.01,
+    #     max = 30.0
+    #     )
+
+    # my_float_vector: FloatVectorProperty(
+    #     name = "Float Vector",
+    #     description="Float Vector Property",
+    #     default=(0.0, 0.0, 0.0),
+    #     #subtype='COLOR',
+    #     min= 0.0, # float
+    #     max = 0.1
+    # ) 
+        
+    # my_enum: EnumProperty(
+    #     name="Enum",
+    #     description="Enum Property",
+    #     items=[ ('OP1', "Option 1", ""),
+    #             ('OP2', "Option 2", ""),
+    #           ]
+    #     )
+
+        
+class GI_GamepadInputPanel(bpy.types.Panel):
     """Creates a Panel in the scene context of the properties editor"""
     bl_label = "Gamepad Input Example"
     bl_idname = "SCENE_PT_gamepad"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "output"
-
+    
     def draw(self, context):
         layout = self.layout
 
         scene = context.scene
+        gamepad = scene.addon_gamepad
 
-        # Create a simple row.
-        layout.label(text=" Simple Row:")
-
+        layout.label(text="Gamepad")
         row = layout.row()
-        row.prop(scene, "frame_start")
-        row.prop(scene, "frame_end")
-
-        # Create an row where the buttons are aligned to each other.
-        layout.label(text=" Aligned Row:")
-
-        row = layout.row(align=True)
-        row.prop(scene, "frame_start")
-        row.prop(scene, "frame_end")
-
-        # Create two columns, by using a split layout.
-        split = layout.split()
-
-        # First column
-        col = split.column()
-        col.label(text="Column One:")
-        col.prop(scene, "frame_end")
-        col.prop(scene, "frame_start")
-
-        # Second column, aligned
-        col = split.column(align=True)
-        col.label(text="Column Two:")
-        col.prop(scene, "frame_start")
-        col.prop(scene, "frame_end")
-
-        # Big render button
-        layout.label(text="Big Button:")
-        row = layout.row()
-        row.scale_y = 3.0
-        row.operator("render.render")
-
-        # Different sizes in a row
-        layout.label(text="Different button sizes:")
-        row = layout.row(align=True)
         row.operator("wm.test_gamepad")
 
-class WM_gamepad(bpy.types.Operator):
+        row = layout.row()
+        row.prop(gamepad, "up")
+        row.prop(gamepad, "down")
+        row.prop(gamepad, "left")
+        row.prop(gamepad, "right")
+
+
+class GI_gamepad(bpy.types.Operator):
     bl_idname = "wm.test_gamepad"
     bl_label = "Test Gamepad"
-    bl_description = "Test function click me"
+    bl_description = "Vibrates active gamepad and shows data in console"
 
     def execute(self, context: bpy.types.Context):
 
@@ -97,15 +136,25 @@ class WM_gamepad(bpy.types.Operator):
                 # print(event.ev_type, event.code, event.state)
 
         return {"FINISHED"}
+    
+classes = (
+    GI_SceneProperties,
+    GI_GamepadInputPanel,
+    GI_gamepad,
+)
 
 def register():
-    bpy.utils.register_class(GamepadInputPanel)
-    bpy.utils.register_class(WM_gamepad)
+    from bpy.utils import register_class
+    for cls in classes:
+        register_class(cls)
 
+    bpy.types.Scene.addon_gamepad = PointerProperty(type=GI_SceneProperties)
 
 def unregister():
-    bpy.utils.unregister_class(GamepadInputPanel)
-    bpy.utils.unregister_class(WM_gamepad)
+    from bpy.utils import unregister_class
+    for cls in reversed(classes):
+        unregister_class(cls)
+    del bpy.types.Scene.addon_gamepad
 
 
 if __name__ == "__main__":
