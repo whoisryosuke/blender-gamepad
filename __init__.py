@@ -85,8 +85,16 @@ class WM_gamepad(bpy.types.Operator):
     def execute(self, context: bpy.types.Context):
 
         print("Finding gamepads...")
-        for device in devices:
-            print("Gamepads found", device)
+        for gamepad in devices:
+            print("Gamepads found", gamepad.get_char_name())
+            try:
+                gamepad.set_vibration(0.5, 0.5, 420)
+            except: 
+                print("Couldn't vibrate gamepad.")
+            # print("Getting gamepad data...")
+            # events = gamepad.read()
+            # for event in events:
+                # print(event.ev_type, event.code, event.state)
 
         return {"FINISHED"}
 
