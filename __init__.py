@@ -155,6 +155,7 @@ class GI_ModalOperator(bpy.types.Operator):
     bl_idname = "object.modal_operator"
     bl_label = "Gamepad Navigation"
     theta = 0
+    analogMovementRate = 0.1
 
     def __init__(self):
         print("Start")
@@ -170,16 +171,23 @@ class GI_ModalOperator(bpy.types.Operator):
     def execute(self, context):
         # Find a viewport
         # We check the context for screen areas, and specifically 3D viewports 
-        currentArea = [area for area in bpy.context.screen.areas if area.type == 'VIEW_3D']
-        if len(currentArea) == 0:
-                return
+        # currentArea = [area for area in bpy.context.screen.areas if area.type == 'VIEW_3D']
+        # if len(currentArea) == 0:
+                # return
         # Then we grab the Region3D view, which has camera-like data
-        viewport = currentArea[0].spaces.active.region_3d
+        # viewport = currentArea[0].spaces.active.region_3d
 
         # Get the camera origin
-        cameraOrigin = numpy.array(viewport.view_location)
+        # cameraOrigin = numpy.array(camera.view_location)
+        # inputForce = 0
 
-        inputForce = 0
+        camera = context.scene.camera
+        rotationX = 0.0
+        rotationY = 0.0
+        rotationZ = 0.0
+        navHorizontal = 0.0
+        navVertical = 0.0
+        navDepth = 0.0
 
         # Sync gamepad input
         for gamepad in devices.gamepads:
@@ -189,30 +197,34 @@ class GI_ModalOperator(bpy.types.Operator):
                 match event.code:
                     case "ABS_HAT0Y":
                         if(event.state == -1):
+                            navVertical = self.analogMovementRate
                             gamepad_input["up"] = True
                             print("[GAMEPAD] UP Pressed")
                         elif(event.state == 1):
+                            navVertical = -self.analogMovementRate
                             gamepad_input["down"] = True
                         elif(event.state == 0):
                             gamepad_input["up"] = False
                             gamepad_input["down"] = False
                     case "ABS_HAT0X":
                         if(event.state == -1):
+                            navHorizontal = -self.analogMovementRate
                             gamepad_input["left"] = True
                         elif(event.state == 1):
+                            navHorizontal = self.analogMovementRate
                             gamepad_input["right"] = True
                         elif(event.state == 0):
                             gamepad_input["left"] = False
                             gamepad_input["right"] = False
                     case "ABS_Y":
                         if(event.state < -1):
-                            inputForce = math.radians(event.state / 30000 * 180)
-                            print("[GAMEPAD] Down Pressed", inputForce)
+                            rotationY = math.radians(event.state / 30000 * 180)
+                            print("[GAMEPAD] Down Pressed", rotationY)
                         elif(event.state > 1):
-                            inputForce = math.radians(event.state / 30000 * 180)
-                            print("[GAMEPAD] Up Pressed", inputForce)
+                            rotationY = math.radians(event.state / 30000 * 180)
+                            print("[GAMEPAD] Up Pressed", rotationY)
                     
-        newTheta = self.theta * inputForce
+        # newTheta = self.theta * inputForce
         # rotationMatrix = numpy.array(
         #     [
         #         [math.cos(newTheta), -math.sin(newTheta), 0],
@@ -220,21 +232,28 @@ class GI_ModalOperator(bpy.types.Operator):
         #         [0,0,1]
         #     ]
         # )
-        rotationMatrix = numpy.array(
-            [
-                [1, -1, 0],
-                [1, 1, 0],
-                [0,0,1]
-            ]
-        )
-        viewport.view_location = numpy.dot(cameraOrigin, rotationMatrix)
-        print("new location", numpy.dot(cameraOrigin, rotationMatrix))
+        # viewport.view_location = numpy.dot(cameraOrigin, rotationMatrix)
+        # print("new location", numpy.dot(cameraOrigin, rotationMatrix))
+        
+        # Set camera rotation in euler angles
+        camera.rotation_mode = 'XYZ'
+        camera.rotation_euler[0] += rotationX * (math.pi * 180)
+        camera.rotation_euler[1] += rotationY * (math.pi * 180)
+        camera.rotation_euler[2] += rotationZ * (math.pi * 180)
+
+        # Set camera translation
+        camera.location.x += navHorizontal
+        camera.location.y += navVertical
+        camera.location.z += navDepth
+
 
         return {'FINISHED'}
 
     def modal(self, context, event):
+        global sync_enabled
         # End loop if user cancels out
         if event.type == 'ESC':
+            sync_enabled = False
             return {'FINISHED'}
         
         # The infinite loop
@@ -243,6 +262,11 @@ class GI_ModalOperator(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
+        global sync_enabled
+        # End loop if user cancels out
+        if event.type == 'ESC':
+            sync_enabled = False
+            return {'FINISHED'}
         # print("initial", event);
         self.execute(context)
 
