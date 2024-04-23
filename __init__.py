@@ -36,12 +36,15 @@ from bpy.types import (Panel,
                        Operator,
                        PropertyGroup,
                        )
-
+import numpy
+import math
+import mathutils
 
 # ------------------------------------------------------------------------
 #    Scene Properties
 # ------------------------------------------------------------------------
 
+sync_enabled = False
 gamepad_input = {
     "up": False,
     "down": False,
@@ -151,19 +154,81 @@ class GI_gamepad(bpy.types.Operator):
 class GI_ModalOperator(bpy.types.Operator):
     bl_idname = "object.modal_operator"
     bl_label = "Gamepad Navigation"
+    theta = 0
 
     def __init__(self):
         print("Start")
+        global sync_enabled
+        sync_enabled = True
+        self.theta = 2 * math.pi / 250
 
     def __del__(self):
+        global sync_enabled
+        sync_enabled = False
         print("End")
 
     def execute(self, context):
+        # Find a viewport
+        # We check the context for screen areas, and specifically 3D viewports 
+        currentArea = [area for area in bpy.context.screen.areas if area.type == 'VIEW_3D']
+        if len(currentArea) == 0:
+                return
+        # Then we grab the Region3D view, which has camera-like data
+        viewport = currentArea[0].spaces.active.region_3d
+
+        # Get the camera origin
+        cameraOrigin = numpy.array(viewport.view_location)
+
+        inputForce = 0
+
         # Sync gamepad input
         for gamepad in devices.gamepads:
             events = gamepad.read()
             for event in events:
                 print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
+                match event.code:
+                    case "ABS_HAT0Y":
+                        if(event.state == -1):
+                            gamepad_input["up"] = True
+                            print("[GAMEPAD] UP Pressed")
+                        elif(event.state == 1):
+                            gamepad_input["down"] = True
+                        elif(event.state == 0):
+                            gamepad_input["up"] = False
+                            gamepad_input["down"] = False
+                    case "ABS_HAT0X":
+                        if(event.state == -1):
+                            gamepad_input["left"] = True
+                        elif(event.state == 1):
+                            gamepad_input["right"] = True
+                        elif(event.state == 0):
+                            gamepad_input["left"] = False
+                            gamepad_input["right"] = False
+                    case "ABS_Y":
+                        if(event.state < -1):
+                            inputForce = math.radians(event.state / 30000 * 180)
+                            print("[GAMEPAD] Down Pressed", inputForce)
+                        elif(event.state > 1):
+                            inputForce = math.radians(event.state / 30000 * 180)
+                            print("[GAMEPAD] Up Pressed", inputForce)
+                    
+        newTheta = self.theta * inputForce
+        # rotationMatrix = numpy.array(
+        #     [
+        #         [math.cos(newTheta), -math.sin(newTheta), 0],
+        #         [math.sin(newTheta), math.cos(newTheta), 0],
+        #         [0,0,1]
+        #     ]
+        # )
+        rotationMatrix = numpy.array(
+            [
+                [1, -1, 0],
+                [1, 1, 0],
+                [0,0,1]
+            ]
+        )
+        viewport.view_location = numpy.dot(cameraOrigin, rotationMatrix)
+        print("new location", numpy.dot(cameraOrigin, rotationMatrix))
 
         return {'FINISHED'}
 
@@ -178,7 +243,7 @@ class GI_ModalOperator(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
-        print("initial");
+        # print("initial", event);
         self.execute(context)
 
         context.window_manager.modal_handler_add(self)
@@ -194,6 +259,19 @@ bpy.types.VIEW3D_MT_object.append(GI_gamepad_menu_item)
 # How to call modal directly (like from a timer)
 # bpy.ops.object.modal_operator('INVOKE_DEFAULT')
 
+def enable_sync():
+    global sync_enabled
+    sync_enabled = True
+
+# Timers
+def every_2_seconds():
+    global sync_enabled
+    if sync_enabled:
+        bpy.ops.object.modal_operator('INVOKE_DEFAULT')
+    return 0.1
+
+
+bpy.app.timers.register(every_2_seconds)
 
 # Load/unload addon into Blender
 classes = (
