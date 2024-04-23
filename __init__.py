@@ -42,6 +42,13 @@ from bpy.types import (Panel,
 #    Scene Properties
 # ------------------------------------------------------------------------
 
+gamepad_input = {
+    "up": False,
+    "down": False,
+    "left": False,
+    "right": False,
+}
+
 class GI_SceneProperties(PropertyGroup):
 
     up: BoolProperty(
@@ -110,6 +117,9 @@ class GI_GamepadInputPanel(bpy.types.Panel):
         row.operator("wm.test_gamepad")
 
         row = layout.row()
+        up = gamepad_input["up"];
+        up_text = "True" if up else "False"
+        row.label(text=up_text)
         row.prop(gamepad, "up")
         row.prop(gamepad, "down")
         row.prop(gamepad, "left")
@@ -136,11 +146,61 @@ class GI_gamepad(bpy.types.Operator):
                 # print(event.ev_type, event.code, event.state)
 
         return {"FINISHED"}
-    
+
+
+class GI_ModalOperator(bpy.types.Operator):
+    bl_idname = "object.modal_operator"
+    bl_label = "Gamepad Navigation"
+
+    def __init__(self):
+        print("Start")
+
+    def __del__(self):
+        print("End")
+
+    def execute(self, context):
+        # Sync gamepad input
+        for gamepad in devices.gamepads:
+            events = gamepad.read()
+            for event in events:
+                print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
+
+        return {'FINISHED'}
+
+    def modal(self, context, event):
+        # End loop if user cancels out
+        if event.type == 'ESC':
+            return {'FINISHED'}
+        
+        # The infinite loop
+        self.execute(context)
+
+        return {'RUNNING_MODAL'}
+
+    def invoke(self, context, event):
+        print("initial");
+        self.execute(context)
+
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+# Menu item
+def GI_gamepad_menu_item(self, context):
+    self.layout.operator(GI_ModalOperator.bl_idname, text="Enable Gamepad Navigation")
+
+# Register and add to the object menu (required to also use F3 search "Modal Operator" for quick access).
+bpy.types.VIEW3D_MT_object.append(GI_gamepad_menu_item)
+
+# How to call modal directly (like from a timer)
+# bpy.ops.object.modal_operator('INVOKE_DEFAULT')
+
+
+# Load/unload addon into Blender
 classes = (
     GI_SceneProperties,
     GI_GamepadInputPanel,
     GI_gamepad,
+    GI_ModalOperator,
 )
 
 def register():
