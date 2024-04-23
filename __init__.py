@@ -40,6 +40,10 @@ import numpy
 import math
 import mathutils
 
+def lerp( a, b, alpha ):
+    return a + alpha * ( b - a )
+
+
 # ------------------------------------------------------------------------
 #    Scene Properties
 # ------------------------------------------------------------------------
@@ -217,12 +221,21 @@ class GI_ModalOperator(bpy.types.Operator):
                             gamepad_input["left"] = False
                             gamepad_input["right"] = False
                     case "ABS_Y":
-                        if(event.state < -1):
-                            rotationY = math.radians(event.state / 30000 * 180)
-                            print("[GAMEPAD] Down Pressed", rotationY)
-                        elif(event.state > 1):
-                            rotationY = math.radians(event.state / 30000 * 180)
-                            print("[GAMEPAD] Up Pressed", rotationY)
+                        if(event.state != 0):
+                            rotationY = math.radians(event.state / 30000)
+                            print("[GAMEPAD] Analog vertical Pressed", rotationY)
+                    case "ABS_X":
+                        if(event.state != 0):
+                            rotationX = math.radians(event.state / 30000)
+                            print("[GAMEPAD] Analog horizontal Pressed", rotationX)
+                    case "ABS_Z":
+                        if(event.state != 0):
+                            rotationZ = math.radians(event.state / 255)
+                            print("[GAMEPAD] Left Trigger Pressed", rotationZ)
+                    case "ABS_RZ":
+                        if(event.state != 0):
+                            rotationZ = -math.radians(event.state / 255)
+                            print("[GAMEPAD] Left Trigger Pressed", rotationZ)
                     
         # newTheta = self.theta * inputForce
         # rotationMatrix = numpy.array(
@@ -237,9 +250,9 @@ class GI_ModalOperator(bpy.types.Operator):
         
         # Set camera rotation in euler angles
         camera.rotation_mode = 'XYZ'
-        camera.rotation_euler[0] += rotationX * (math.pi * 180)
-        camera.rotation_euler[1] += rotationY * (math.pi * 180)
-        camera.rotation_euler[2] += rotationZ * (math.pi * 180)
+        camera.rotation_euler[0] += rotationX
+        camera.rotation_euler[1] += rotationY
+        camera.rotation_euler[2] += rotationZ
 
         # Set camera translation
         camera.location.x += navHorizontal
@@ -280,22 +293,20 @@ def GI_gamepad_menu_item(self, context):
 # Register and add to the object menu (required to also use F3 search "Modal Operator" for quick access).
 bpy.types.VIEW3D_MT_object.append(GI_gamepad_menu_item)
 
-# How to call modal directly (like from a timer)
-# bpy.ops.object.modal_operator('INVOKE_DEFAULT')
-
 def enable_sync():
     global sync_enabled
     sync_enabled = True
 
 # Timers
-def every_2_seconds():
+def sync_timer():
     global sync_enabled
     if sync_enabled:
+        # Call sync function via timer
         bpy.ops.object.modal_operator('INVOKE_DEFAULT')
     return 0.1
 
 
-bpy.app.timers.register(every_2_seconds)
+bpy.app.timers.register(sync_timer)
 
 # Load/unload addon into Blender
 classes = (
