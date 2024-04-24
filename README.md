@@ -1,3 +1,5 @@
+![Example of Blender addon using DualSense gamepad](./screenshot.gif)
+
 # Blender Gamepad Input Addon
 
 An example of how to get gamepad and other device input (like MIDI maybe) and use it inside Blender.
