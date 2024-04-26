@@ -18,8 +18,9 @@ An example of how to get gamepad and other device input (like MIDI maybe) and us
 ## How to use
 
 1. Turn on your controller before opening Blender.
-1. You can test if the gamepad is working by going to the Properties window and the Render Output tab, there's a panel for the gamepad with a "Test Gamepad button".
+1. You can test if the gamepad is working by going to the 3D Viewport and expanding the side menu, there's a panel for the gamepad with a "Test Gamepad button".
 1. This button should vibrate the controller. If it's not vibrating it's not being detected.
+1. You can also see a list of detected gamepads here
 
 > If you're using a PlayStation controller on Windows, you'll need to use an app like DS4Windows to create an fake XInput profile. The `inputs` library uses XInput on Windows, which is the protocol for Xbox and other 3rd party controllers.
 

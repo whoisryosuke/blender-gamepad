@@ -50,21 +50,33 @@ def lerp( a, b, alpha ):
 # ------------------------------------------------------------------------
 
 sync_enabled = False
-gamepad_input = {
-    "up": False,
-    "down": False,
-    "left": False,
-    "right": False,
-}
 
 class GamepadInput():
-    def __init__(self) -> None:
-        self.up: False
-        self.down: False
-        self.left: False
-        self.right: False
+    def __init__(self, index) -> None:
+        # Initialize props to track gamepad input
+        self.up = False
+        self.down = False
+        self.left = False
+        self.right = False
+        self.left_analog = 0.0
+        self.right_analog = 0.0
+        self.l1 = False
+        self.l2 = 0.0
+        self.r1 = False
+        self.r2 = 0.0
+        self.cross = False #south
+        self.square = False #west
+        self.triangle = False #north
+        self.circle = False #east
+        self.start = False
+        self.select = False
+        self.home = False
+        self.touchpad = False
 
-        self._thread_flag= threading.Event()
+        self.gamepad_index = index
+        
+        # Setup threads
+        self._thread_flag= threading.Event() # used to pause thread
         self._thread= threading.Thread(target=self._sync_gamepad, args=(self._thread_flag,))
         self._thread.daemon = True # used to kill thread if Blender closes
         self._thread.start()
@@ -74,106 +86,100 @@ class GamepadInput():
         self._thread_flag.set()
 
     def _sync_gamepad(self, thread_flag):
+        # Create "infinite loop" while thread is flagged to run
         while not thread_flag.is_set():
-            print("Syncing gamepad")
             self._sync_gamepad_data()
     
     def _sync_gamepad_data(self):
         # Sync gamepad input
-        for gamepad in devices.gamepads:
-            events = gamepad.read()
-            for event in events:
-                # print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
-                match event.code:
-                    case "ABS_HAT0Y":
-                        if(event.state == -1):
-                            self.up = True
-                        elif(event.state == 1):
-                            self.down = True
-                        elif(event.state == 0):
-                            self.up = False
-                            self.down = False
-                    case "ABS_HAT0X":
-                        if(event.state == -1):
-                            self.left = True
-                        elif(event.state == 1):
-                            self.right = True
-                        elif(event.state == 0):
-                            self.left = False
-                            self.right = False
+        gamepad = devices.gamepads[self.gamepad_index]
+        events = gamepad.read()
+        for event in events:
+            # print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
+            match event.code:
+                case "ABS_HAT0Y":
+                    if(event.state == -1):
+                        self.up = True
+                    elif(event.state == 1):
+                        self.down = True
+                    elif(event.state == 0):
+                        self.up = False
+                        self.down = False
+                case "ABS_HAT0X":
+                    if(event.state == -1):
+                        self.left = True
+                    elif(event.state == 1):
+                        self.right = True
+                    elif(event.state == 0):
+                        self.left = False
+                        self.right = False
+                case "ABS_Y":
+                    self.left_analog = self._normalize_btn_analog(event.state)
+                case "ABS_X":
+                    self.right_analog = self._normalize_btn_analog(event.state)
+                case "ABS_Z":
+                    self.l2 = self._normalize_btn_trigger(event.state)
+                case "ABS_RZ":
+                    self.r2 = self._normalize_btn_trigger(event.state)
+                case "BTN_SOUTH":
+                    self.cross = self._normalize_btn_bool(event.state)
+                case "BTN_NORTH":
+                    self.triangle = self._normalize_btn_bool(event.state)
+                case "BTN_WEST":
+                    self.square = self._normalize_btn_bool(event.state)
+                case "BTN_EAST":
+                    self.circle = self._normalize_btn_bool(event.state)
+
+    def _normalize_btn_bool(state):
+        return True if state == 1 else False
+    
+    def _normalize_btn_analog(state):
+        """Takes analog stick input and normalizes it to 0 - 1"""
+        return state / 30000
+    
+    def _normalize_btn_trigger(state):
+        """Takes trigger input and normalizes it to 0 - 1"""
+        return state / 255
+
+
+def gamepad_items(self, context):
+    items = [(str(index), gamepad.get_char_name(), "") for index, gamepad in enumerate(devices.gamepads)]
+    return items
 
 class GI_SceneProperties(PropertyGroup):
-
-    up: BoolProperty(
-        name="Up",
-        description="Up button on gamepad",
-        default = False
-        )
-    down: BoolProperty(
-        name="Down",
-        description="Down button on gamepad",
-        default = False
-        )
-    left: BoolProperty(
-        name="Left",
-        description="Left button on gamepad",
-        default = False
-        )
-    right: BoolProperty(
-        name="Right",
-        description="Right button on gamepad",
-        default = False
-        )
-
-    # my_float: FloatProperty(
-    #     name = "Float",
-    #     description = "Float Property",
-    #     default = 23.7,
-    #     min = 0.01,
-    #     max = 30.0
-    #     )
-
-    # my_float_vector: FloatVectorProperty(
-    #     name = "Float Vector",
-    #     description="Float Vector Property",
-    #     default=(0.0, 0.0, 0.0),
-    #     #subtype='COLOR',
-    #     min= 0.0, # float
-    #     max = 0.1
-    # ) 
         
-    # my_enum: EnumProperty(
-    #     name="Enum",
-    #     description="Enum Property",
-    #     items=[ ('OP1', "Option 1", ""),
-    #             ('OP2', "Option 2", ""),
-    #           ]
-    #     )
+    active_gamepad: EnumProperty(
+        name="Active Gamepad",
+        description="Gamepad used for control",
+        items=gamepad_items
+        )
 
-        
+    
 class GI_GamepadInputPanel(bpy.types.Panel):
     """Creates a Panel in the scene context of the properties editor"""
-    bl_label = "Gamepad Input Example"
+    bl_category = "Gamepad"
+    bl_label = "Gamepad Settings"
     bl_idname = "SCENE_PT_gamepad"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "output"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    # bl_context = "output"
     
     def draw(self, context):
         layout = self.layout
 
         scene = context.scene
-        gamepad = scene.gamepad_input
+        gamepad_props = scene.gamepad_props
+        
+        # TODO: Specify active gamepad from list
+        layout.label(text="Select gamepad")
+        # row = layout.row()
+        # row.operator("wm.refresh_gamepads")
+        row = layout.row()
+        row.prop(gamepad_props, "active_gamepad")
 
-        layout.label(text="Gamepad")
+        layout.label(text="Debug")
         row = layout.row()
         row.operator("wm.test_gamepad")
-
-        row = layout.row()
-        up_text = "True" if gamepad.up else "False"
-        row.label(text="Up:" + up_text)
-        down_text = "True" if gamepad.down else "False"
-        row.label(text="Down:" + down_text)
 
 
 class GI_gamepad(bpy.types.Operator):
@@ -185,16 +191,30 @@ class GI_gamepad(bpy.types.Operator):
     def execute(self, context: bpy.types.Context):
 
         print("Finding gamepads...")
-        for gamepad in devices:
-            print("Gamepads found", gamepad.get_char_name())
-            try:
-                gamepad.set_vibration(0.5, 0.5, 420)
-            except: 
-                print("Couldn't vibrate gamepad.")
-            # print("Getting gamepad data...")
-            # events = gamepad.read()
-            # for event in events:
-                # print(event.ev_type, event.code, event.state)
+        current_gamepad = context.scene.gamepad_props.active_gamepad
+        print("active gamepad", current_gamepad)
+        try:
+            devices.gamepads[int(current_gamepad)].set_vibration(0.5, 0.5, 420)
+        except: 
+            print("Couldn't vibrate gamepad.")
+
+        return {"FINISHED"}
+
+class GI_gamepad_refresh(bpy.types.Operator):
+    """Test function for gamepads"""
+    bl_idname = "wm.refresh_gamepads"
+    bl_label = "Refresh Gamepad List"
+    bl_description = "Checks for changes in gamepads and updates active list"
+
+
+    def execute(self, context: bpy.types.Context):
+
+        print("Finding gamepads...")
+        context.scene.gamepad_props.active_gamepad = EnumProperty(
+            name="Enum",
+            description="Enum Property",
+            items=self.gamepad_items
+        )
 
         return {"FINISHED"}
 
@@ -212,28 +232,17 @@ class GI_ModalOperator(bpy.types.Operator):
         if event.type in {'RIGHTMOUSE', 'ESC'}:
             return self.cancel(context)
         if event.type == 'TIMER':
-            # Find a viewport
-            # We check the context for screen areas, and specifically 3D viewports 
-            # currentArea = [area for area in bpy.context.screen.areas if area.type == 'VIEW_3D']
-            # if len(currentArea) == 0:
-                    # return
-            # Then we grab the Region3D view, which has camera-like data
-            # viewport = currentArea[0].spaces.active.region_3d
-
-            # Get the camera origin
-            # cameraOrigin = numpy.array(camera.view_location)
-            # inputForce = 0
 
             camera = context.scene.camera
-            gamepad_input = context.scene.gamepad_input
-            # gamepad_input = self.gamepad
+            # gamepad_input = context.scene.gamepad_input
+            gamepad_input = self.gamepad
+            print(dir(gamepad_input))
             rotationX = 0.0
             rotationY = 0.0
             rotationZ = 0.0
             navHorizontal = 0.0
             navVertical = 0.0
             navDepth = 0.0
-
 
             if gamepad_input.up:
                 navVertical = self.analogMovementRate
@@ -247,29 +256,6 @@ class GI_ModalOperator(bpy.types.Operator):
             if gamepad_input.right:
                 navHorizontal = -self.analogMovementRate
                 print("[GAMEPAD] Pressed right")
-
-            # # Sync gamepad input
-            # for gamepad in devices.gamepads:
-            #     events = gamepad.read()
-            #     for event in events:
-            #         # print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
-            #         match event.code:
-            #             case "ABS_Y":
-            #                 if(event.state != 0):
-            #                     rotationY = math.radians(event.state / 30000)
-            #                     # print("[GAMEPAD] Analog vertical Pressed", rotationY)
-            #             case "ABS_X":
-            #                 if(event.state != 0):
-            #                     rotationX = math.radians(event.state / 30000)
-            #                     # print("[GAMEPAD] Analog horizontal Pressed", rotationX)
-            #             case "ABS_Z":
-            #                 if(event.state != 0):
-            #                     rotationZ = math.radians(event.state / 255)
-            #                     # print("[GAMEPAD] Left Trigger Pressed", rotationZ)
-            #             case "ABS_RZ":
-            #                 if(event.state != 0):
-            #                     rotationZ = -math.radians(event.state / 255)
-            #                     # print("[GAMEPAD] Left Trigger Pressed", rotationZ)
             
             # Set camera rotation in euler angles
             camera.rotation_mode = 'XYZ'
@@ -293,7 +279,7 @@ class GI_ModalOperator(bpy.types.Operator):
 
         # Create the gamepad only when running modal
         # (only do this if you disable the global one below)
-        # self.gamepad = GamepadInput()
+        self.gamepad = GamepadInput(int(context.scene.gamepad_props.active_gamepad))
 
         return {'RUNNING_MODAL'}
 
@@ -303,8 +289,8 @@ class GI_ModalOperator(bpy.types.Operator):
         wm.event_timer_remove(self._timer)
 
         # Release gamepad class and threads
-        # self.gamepad.stop()
-        # del self.gamepad
+        self.gamepad.stop()
+        del self.gamepad
 
         return {'FINISHED'}
 
@@ -320,6 +306,7 @@ classes = (
     GI_SceneProperties,
     GI_GamepadInputPanel,
     GI_gamepad,
+    GI_gamepad_refresh,
     GI_ModalOperator,
 )
 
@@ -328,15 +315,16 @@ def register():
     for cls in classes:
         register_class(cls)
 
+    bpy.types.Scene.gamepad_props = PointerProperty(type=GI_SceneProperties)
     # If you wanted global gamepad input, you can enable it here
     # to be active all the time instead of only when modal is running
-    bpy.types.Scene.gamepad_input = GamepadInput()
+    # bpy.types.Scene.gamepad_input = GamepadInput()
 
 def unregister():
     from bpy.utils import unregister_class
     for cls in reversed(classes):
         unregister_class(cls)
-    del bpy.types.Scene.gamepad_input
+    # del bpy.types.Scene.gamepad_input
 
 
 if __name__ == "__main__":
