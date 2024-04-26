@@ -163,20 +163,17 @@ class GI_GamepadInputPanel(bpy.types.Panel):
         layout = self.layout
 
         scene = context.scene
-        gamepad = scene.addon_gamepad
+        gamepad = scene.gamepad_input
 
         layout.label(text="Gamepad")
         row = layout.row()
         row.operator("wm.test_gamepad")
 
         row = layout.row()
-        up = gamepad_input["up"];
-        up_text = "True" if up else "False"
-        row.label(text=up_text)
-        row.prop(gamepad, "up")
-        row.prop(gamepad, "down")
-        row.prop(gamepad, "left")
-        row.prop(gamepad, "right")
+        up_text = "True" if gamepad.up else "False"
+        row.label(text="Up:" + up_text)
+        down_text = "True" if gamepad.down else "False"
+        row.label(text="Down:" + down_text)
 
 
 class GI_gamepad(bpy.types.Operator):
@@ -228,8 +225,8 @@ class GI_ModalOperator(bpy.types.Operator):
             # inputForce = 0
 
             camera = context.scene.camera
-            gamepad_data = context.scene.addon_gamepad
             gamepad_input = context.scene.gamepad_input
+            # gamepad_input = self.gamepad
             rotationX = 0.0
             rotationY = 0.0
             rotationZ = 0.0
@@ -244,6 +241,12 @@ class GI_ModalOperator(bpy.types.Operator):
             if gamepad_input.down:
                 navVertical = -self.analogMovementRate
                 print("[GAMEPAD] Pressed down")
+            if gamepad_input.left:
+                navHorizontal = self.analogMovementRate
+                print("[GAMEPAD] Pressed left")
+            if gamepad_input.right:
+                navHorizontal = -self.analogMovementRate
+                print("[GAMEPAD] Pressed right")
 
             # # Sync gamepad input
             # for gamepad in devices.gamepads:
@@ -251,26 +254,6 @@ class GI_ModalOperator(bpy.types.Operator):
             #     for event in events:
             #         # print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
             #         match event.code:
-            #             case "ABS_HAT0Y":
-            #                 if(event.state == -1):
-            #                     navVertical = self.analogMovementRate
-            #                     gamepad_data["up"] = True
-            #                 elif(event.state == 1):
-            #                     navVertical = -self.analogMovementRate
-            #                     gamepad_data["down"] = True
-            #                 elif(event.state == 0):
-            #                     gamepad_data["up"] = False
-            #                     gamepad_data["down"] = False
-            #             case "ABS_HAT0X":
-            #                 if(event.state == -1):
-            #                     navHorizontal = -self.analogMovementRate
-            #                     gamepad_data["left"] = True
-            #                 elif(event.state == 1):
-            #                     navHorizontal = self.analogMovementRate
-            #                     gamepad_data["right"] = True
-            #                 elif(event.state == 0):
-            #                     gamepad_data["left"] = False
-            #                     gamepad_data["right"] = False
             #             case "ABS_Y":
             #                 if(event.state != 0):
             #                     rotationY = math.radians(event.state / 30000)
@@ -287,17 +270,6 @@ class GI_ModalOperator(bpy.types.Operator):
             #                 if(event.state != 0):
             #                     rotationZ = -math.radians(event.state / 255)
             #                     # print("[GAMEPAD] Left Trigger Pressed", rotationZ)
-                        
-            # newTheta = self.theta * inputForce
-            # rotationMatrix = numpy.array(
-            #     [
-            #         [math.cos(newTheta), -math.sin(newTheta), 0],
-            #         [math.sin(newTheta), math.cos(newTheta), 0],
-            #         [0,0,1]
-            #     ]
-            # )
-            # viewport.view_location = numpy.dot(cameraOrigin, rotationMatrix)
-            # print("new location", numpy.dot(cameraOrigin, rotationMatrix))
             
             # Set camera rotation in euler angles
             camera.rotation_mode = 'XYZ'
@@ -318,11 +290,22 @@ class GI_ModalOperator(bpy.types.Operator):
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, window=context.window)
         wm.modal_handler_add(self)
+
+        # Create the gamepad only when running modal
+        # (only do this if you disable the global one below)
+        # self.gamepad = GamepadInput()
+
         return {'RUNNING_MODAL'}
 
     def cancel(self, context):
+        # Remove timer
         wm = context.window_manager
         wm.event_timer_remove(self._timer)
+
+        # Release gamepad class and threads
+        # self.gamepad.stop()
+        # del self.gamepad
+
         return {'FINISHED'}
 
 # Menu item
@@ -345,17 +328,16 @@ def register():
     for cls in classes:
         register_class(cls)
 
-    bpy.types.Scene.addon_gamepad = PointerProperty(type=GI_SceneProperties)
+    # If you wanted global gamepad input, you can enable it here
+    # to be active all the time instead of only when modal is running
     bpy.types.Scene.gamepad_input = GamepadInput()
 
 def unregister():
     from bpy.utils import unregister_class
     for cls in reversed(classes):
         unregister_class(cls)
-    del bpy.types.Scene.addon_gamepad
     del bpy.types.Scene.gamepad_input
 
 
 if __name__ == "__main__":
     register()
-    bpy.ops.object.modal_operator('EXEC_DEFAULT')
