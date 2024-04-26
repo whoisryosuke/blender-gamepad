@@ -36,6 +36,7 @@ from bpy.types import (Panel,
                        Operator,
                        PropertyGroup,
                        )
+import threading
 import numpy
 import math
 import mathutils
@@ -55,6 +56,51 @@ gamepad_input = {
     "left": False,
     "right": False,
 }
+
+class GamepadInput():
+    def __init__(self) -> None:
+        self.up: False
+        self.down: False
+        self.left: False
+        self.right: False
+
+        self._thread_flag= threading.Event()
+        self._thread= threading.Thread(target=self._sync_gamepad, args=(self._thread_flag,))
+        self._thread.daemon = True # used to kill thread if Blender closes
+        self._thread.start()
+
+
+    def stop(self):
+        self._thread_flag.set()
+
+    def _sync_gamepad(self, thread_flag):
+        while not thread_flag.is_set():
+            print("Syncing gamepad")
+            self._sync_gamepad_data()
+    
+    def _sync_gamepad_data(self):
+        # Sync gamepad input
+        for gamepad in devices.gamepads:
+            events = gamepad.read()
+            for event in events:
+                # print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
+                match event.code:
+                    case "ABS_HAT0Y":
+                        if(event.state == -1):
+                            self.up = True
+                        elif(event.state == 1):
+                            self.down = True
+                        elif(event.state == 0):
+                            self.up = False
+                            self.down = False
+                    case "ABS_HAT0X":
+                        if(event.state == -1):
+                            self.left = True
+                        elif(event.state == 1):
+                            self.right = True
+                        elif(event.state == 0):
+                            self.left = False
+                            self.right = False
 
 class GI_SceneProperties(PropertyGroup):
 
@@ -183,6 +229,7 @@ class GI_ModalOperator(bpy.types.Operator):
 
             camera = context.scene.camera
             gamepad_data = context.scene.addon_gamepad
+            gamepad_input = context.scene.gamepad_input
             rotationX = 0.0
             rotationY = 0.0
             rotationZ = 0.0
@@ -190,48 +237,56 @@ class GI_ModalOperator(bpy.types.Operator):
             navVertical = 0.0
             navDepth = 0.0
 
-            # Sync gamepad input
-            for gamepad in devices.gamepads:
-                events = gamepad.read()
-                for event in events:
-                    # print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
-                    match event.code:
-                        case "ABS_HAT0Y":
-                            if(event.state == -1):
-                                navVertical = self.analogMovementRate
-                                gamepad_data["up"] = True
-                            elif(event.state == 1):
-                                navVertical = -self.analogMovementRate
-                                gamepad_data["down"] = True
-                            elif(event.state == 0):
-                                gamepad_data["up"] = False
-                                gamepad_data["down"] = False
-                        case "ABS_HAT0X":
-                            if(event.state == -1):
-                                navHorizontal = -self.analogMovementRate
-                                gamepad_data["left"] = True
-                            elif(event.state == 1):
-                                navHorizontal = self.analogMovementRate
-                                gamepad_data["right"] = True
-                            elif(event.state == 0):
-                                gamepad_data["left"] = False
-                                gamepad_data["right"] = False
-                        case "ABS_Y":
-                            if(event.state != 0):
-                                rotationY = math.radians(event.state / 30000)
-                                # print("[GAMEPAD] Analog vertical Pressed", rotationY)
-                        case "ABS_X":
-                            if(event.state != 0):
-                                rotationX = math.radians(event.state / 30000)
-                                # print("[GAMEPAD] Analog horizontal Pressed", rotationX)
-                        case "ABS_Z":
-                            if(event.state != 0):
-                                rotationZ = math.radians(event.state / 255)
-                                # print("[GAMEPAD] Left Trigger Pressed", rotationZ)
-                        case "ABS_RZ":
-                            if(event.state != 0):
-                                rotationZ = -math.radians(event.state / 255)
-                                # print("[GAMEPAD] Left Trigger Pressed", rotationZ)
+
+            if gamepad_input.up:
+                navVertical = self.analogMovementRate
+                print("[GAMEPAD] Pressed up")
+            if gamepad_input.down:
+                navVertical = -self.analogMovementRate
+                print("[GAMEPAD] Pressed down")
+
+            # # Sync gamepad input
+            # for gamepad in devices.gamepads:
+            #     events = gamepad.read()
+            #     for event in events:
+            #         # print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
+            #         match event.code:
+            #             case "ABS_HAT0Y":
+            #                 if(event.state == -1):
+            #                     navVertical = self.analogMovementRate
+            #                     gamepad_data["up"] = True
+            #                 elif(event.state == 1):
+            #                     navVertical = -self.analogMovementRate
+            #                     gamepad_data["down"] = True
+            #                 elif(event.state == 0):
+            #                     gamepad_data["up"] = False
+            #                     gamepad_data["down"] = False
+            #             case "ABS_HAT0X":
+            #                 if(event.state == -1):
+            #                     navHorizontal = -self.analogMovementRate
+            #                     gamepad_data["left"] = True
+            #                 elif(event.state == 1):
+            #                     navHorizontal = self.analogMovementRate
+            #                     gamepad_data["right"] = True
+            #                 elif(event.state == 0):
+            #                     gamepad_data["left"] = False
+            #                     gamepad_data["right"] = False
+            #             case "ABS_Y":
+            #                 if(event.state != 0):
+            #                     rotationY = math.radians(event.state / 30000)
+            #                     # print("[GAMEPAD] Analog vertical Pressed", rotationY)
+            #             case "ABS_X":
+            #                 if(event.state != 0):
+            #                     rotationX = math.radians(event.state / 30000)
+            #                     # print("[GAMEPAD] Analog horizontal Pressed", rotationX)
+            #             case "ABS_Z":
+            #                 if(event.state != 0):
+            #                     rotationZ = math.radians(event.state / 255)
+            #                     # print("[GAMEPAD] Left Trigger Pressed", rotationZ)
+            #             case "ABS_RZ":
+            #                 if(event.state != 0):
+            #                     rotationZ = -math.radians(event.state / 255)
+            #                     # print("[GAMEPAD] Left Trigger Pressed", rotationZ)
                         
             # newTheta = self.theta * inputForce
             # rotationMatrix = numpy.array(
@@ -256,9 +311,10 @@ class GI_ModalOperator(bpy.types.Operator):
             camera.location.z += navDepth
 
 
-        return {'PASS_THROUGH'}
+        return {'RUNNING_MODAL'}
     
     def execute(self, context):
+        # Create the timer
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, window=context.window)
         wm.modal_handler_add(self)
@@ -290,12 +346,14 @@ def register():
         register_class(cls)
 
     bpy.types.Scene.addon_gamepad = PointerProperty(type=GI_SceneProperties)
+    bpy.types.Scene.gamepad_input = GamepadInput()
 
 def unregister():
     from bpy.utils import unregister_class
     for cls in reversed(classes):
         unregister_class(cls)
     del bpy.types.Scene.addon_gamepad
+    del bpy.types.Scene.gamepad_input
 
 
 if __name__ == "__main__":
