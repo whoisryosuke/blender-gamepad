@@ -95,7 +95,7 @@ class GamepadInput():
         gamepad = devices.gamepads[self.gamepad_index]
         events = gamepad.read()
         for event in events:
-            # print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
+            print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
             match event.code:
                 case "ABS_HAT0Y":
                     if(event.state == -1):
@@ -130,22 +130,23 @@ class GamepadInput():
                 case "BTN_EAST":
                     self.circle = self._normalize_btn_bool(event.state)
 
-    def _normalize_btn_bool(state):
+    def _normalize_btn_bool(self, state):
         return True if state == 1 else False
     
-    def _normalize_btn_analog(state):
+    def _normalize_btn_analog(self, state):
         """Takes analog stick input and normalizes it to 0 - 1"""
         return state / 30000
     
-    def _normalize_btn_trigger(state):
+    def _normalize_btn_trigger(self, state):
         """Takes trigger input and normalizes it to 0 - 1"""
         return state / 255
 
-
+# Creates dropdown items formatted as an array of tuples
 def gamepad_items(self, context):
     items = [(str(index), gamepad.get_char_name(), "") for index, gamepad in enumerate(devices.gamepads)]
     return items
 
+# UI properties
 class GI_SceneProperties(PropertyGroup):
         
     active_gamepad: EnumProperty(
@@ -154,7 +155,7 @@ class GI_SceneProperties(PropertyGroup):
         items=gamepad_items
         )
 
-    
+# UI Panel
 class GI_GamepadInputPanel(bpy.types.Panel):
     """Creates a Panel in the scene context of the properties editor"""
     bl_category = "Gamepad"
@@ -200,24 +201,6 @@ class GI_gamepad(bpy.types.Operator):
 
         return {"FINISHED"}
 
-class GI_gamepad_refresh(bpy.types.Operator):
-    """Test function for gamepads"""
-    bl_idname = "wm.refresh_gamepads"
-    bl_label = "Refresh Gamepad List"
-    bl_description = "Checks for changes in gamepads and updates active list"
-
-
-    def execute(self, context: bpy.types.Context):
-
-        print("Finding gamepads...")
-        context.scene.gamepad_props.active_gamepad = EnumProperty(
-            name="Enum",
-            description="Enum Property",
-            items=self.gamepad_items
-        )
-
-        return {"FINISHED"}
-
 
 class GI_ModalOperator(bpy.types.Operator):
     """Gamepad syncing and camera movement"""
@@ -236,7 +219,6 @@ class GI_ModalOperator(bpy.types.Operator):
             camera = context.scene.camera
             # gamepad_input = context.scene.gamepad_input
             gamepad_input = self.gamepad
-            print(dir(gamepad_input))
             rotationX = 0.0
             rotationY = 0.0
             rotationZ = 0.0
@@ -306,7 +288,6 @@ classes = (
     GI_SceneProperties,
     GI_GamepadInputPanel,
     GI_gamepad,
-    GI_gamepad_refresh,
     GI_ModalOperator,
 )
 
