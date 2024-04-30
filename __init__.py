@@ -154,6 +154,12 @@ class GI_SceneProperties(PropertyGroup):
         description="Gamepad used for control",
         items=gamepad_items
         )
+        
+    analog_left: PointerProperty(
+        name="Analog Left",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
 
 # UI Panel
 class GI_GamepadInputPanel(bpy.types.Panel):
@@ -181,6 +187,10 @@ class GI_GamepadInputPanel(bpy.types.Panel):
         layout.label(text="Debug")
         row = layout.row()
         row.operator("wm.test_gamepad")
+
+        layout.label(text="Controls")
+        row = layout.row()
+        row.prop(gamepad_props, "analog_left")
 
 
 class GI_gamepad(bpy.types.Operator):
@@ -217,6 +227,11 @@ class GI_ModalOperator(bpy.types.Operator):
         if event.type == 'TIMER':
 
             camera = context.scene.camera
+            gamepad_props = context.scene.gamepad_props
+            
+            print("analog", gamepad_props.analog_left)
+            move_obj = gamepad_props.analog_left
+
             # gamepad_input = context.scene.gamepad_input
             gamepad_input = self.gamepad
             rotationX = 0.0
@@ -246,9 +261,9 @@ class GI_ModalOperator(bpy.types.Operator):
             camera.rotation_euler[2] += rotationZ
 
             # Set camera translation
-            camera.location.x += navHorizontal
-            camera.location.y += navVertical
-            camera.location.z += navDepth
+            move_obj.location.x += navHorizontal
+            move_obj.location.y += navVertical
+            move_obj.location.z += navDepth
 
 
         return {'RUNNING_MODAL'}
