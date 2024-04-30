@@ -58,8 +58,10 @@ class GamepadInput():
         self.down = False
         self.left = False
         self.right = False
-        self.left_analog = 0.0
-        self.right_analog = 0.0
+        self.left_analog_x = 0.0
+        self.left_analog_y = 0.0
+        self.right_analog_x = 0.0
+        self.right_analog_y = 0.0
         self.l1 = False
         self.l2 = 0.0
         self.r1 = False
@@ -68,8 +70,8 @@ class GamepadInput():
         self.square = False #west
         self.triangle = False #north
         self.circle = False #east
-        self.start = False
-        self.select = False
+        self.start = False # I refuse to acknowledge "option". start for life.
+        self.select = False # aka share
         self.home = False
         self.touchpad = False
 
@@ -114,9 +116,13 @@ class GamepadInput():
                         self.left = False
                         self.right = False
                 case "ABS_Y":
-                    self.left_analog = self._normalize_btn_analog(event.state)
+                    self.left_analog_x = self._normalize_btn_analog(event.state)
                 case "ABS_X":
-                    self.right_analog = self._normalize_btn_analog(event.state)
+                    self.left_analog_y = self._normalize_btn_analog(event.state)
+                case "ABS_RY":
+                    self.right_analog_x = self._normalize_btn_analog(event.state)
+                case "ABS_RX":
+                    self.right_analog_y = self._normalize_btn_analog(event.state)
                 case "ABS_Z":
                     self.l2 = self._normalize_btn_trigger(event.state)
                 case "ABS_RZ":
@@ -129,6 +135,14 @@ class GamepadInput():
                     self.square = self._normalize_btn_bool(event.state)
                 case "BTN_EAST":
                     self.circle = self._normalize_btn_bool(event.state)
+                case "BTN_TL":
+                    self.l1 = self._normalize_btn_bool(event.state)
+                case "BTN_TR":
+                    self.r1 = self._normalize_btn_bool(event.state)
+                case "BTN_SELECT":
+                    self.start = self._normalize_btn_bool(event.state)
+                case "BTN_START":
+                    self.select = self._normalize_btn_bool(event.state)
 
     def _normalize_btn_bool(self, state):
         return True if state == 1 else False
@@ -157,6 +171,42 @@ class GI_SceneProperties(PropertyGroup):
         
     analog_left: PointerProperty(
         name="Analog Left",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
+        
+    btn_cross: PointerProperty(
+        name="Cross button",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
+        
+    btn_circle: PointerProperty(
+        name="Circle button",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
+        
+    btn_triangle: PointerProperty(
+        name="Triangle button",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
+        
+    btn_square: PointerProperty(
+        name="Square button",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
+        
+    btn_l1: PointerProperty(
+        name="L1 button",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
+        
+    btn_r1: PointerProperty(
+        name="R1 button",
         description="Object to be controlled",
         type=bpy.types.Object,
         )
@@ -191,6 +241,18 @@ class GI_GamepadInputPanel(bpy.types.Panel):
         layout.label(text="Controls")
         row = layout.row()
         row.prop(gamepad_props, "analog_left")
+        row = layout.row()
+        row.prop(gamepad_props, "btn_cross")
+        row = layout.row()
+        row.prop(gamepad_props, "btn_circle")
+        row = layout.row()
+        row.prop(gamepad_props, "btn_triangle")
+        row = layout.row()
+        row.prop(gamepad_props, "btn_square")
+        row = layout.row()
+        row.prop(gamepad_props, "btn_l1")
+        row = layout.row()
+        row.prop(gamepad_props, "btn_r1")
 
 
 class GI_gamepad(bpy.types.Operator):
@@ -219,7 +281,11 @@ class GI_ModalOperator(bpy.types.Operator):
     theta = 0
     analogMovementRate = 0.1
 
+    # Timer used for modal
     _timer = None
+
+    # Objects
+    _obj_analog_left = None
 
     def modal(self, context, event):
         if event.type in {'RIGHTMOUSE', 'ESC'}:
@@ -229,10 +295,8 @@ class GI_ModalOperator(bpy.types.Operator):
             camera = context.scene.camera
             gamepad_props = context.scene.gamepad_props
             
-            print("analog", gamepad_props.analog_left)
             move_obj = gamepad_props.analog_left
 
-            # gamepad_input = context.scene.gamepad_input
             gamepad_input = self.gamepad
             rotationX = 0.0
             rotationY = 0.0
@@ -240,30 +304,57 @@ class GI_ModalOperator(bpy.types.Operator):
             navHorizontal = 0.0
             navVertical = 0.0
             navDepth = 0.0
+            btn_cross_depth = 0.0
+            btn_circle_depth = 0.0
+            btn_triangle_depth = 0.0
+            btn_square_depth = 0.0
+            btn_l1_depth = 0.0
+            btn_r1_depth = 0.0
 
+            # Get input
+            ## D-pad
             if gamepad_input.up:
                 navVertical = self.analogMovementRate
-                print("[GAMEPAD] Pressed up")
             if gamepad_input.down:
                 navVertical = -self.analogMovementRate
-                print("[GAMEPAD] Pressed down")
             if gamepad_input.left:
                 navHorizontal = self.analogMovementRate
-                print("[GAMEPAD] Pressed left")
             if gamepad_input.right:
                 navHorizontal = -self.analogMovementRate
-                print("[GAMEPAD] Pressed right")
             
-            # Set camera rotation in euler angles
-            camera.rotation_mode = 'XYZ'
-            camera.rotation_euler[0] += rotationX
-            camera.rotation_euler[1] += rotationY
-            camera.rotation_euler[2] += rotationZ
+            ## Left analog stick
+            rotationY = math.radians(gamepad_input.left_analog_y * 30)
+            rotationX = math.radians(gamepad_input.left_analog_x * 30)
+
+            ## Buttons
+            btn_cross_depth = 1 if gamepad_input.cross else 0
+            btn_circle_depth = 1 if gamepad_input.circle else 0
+            btn_triangle_depth = 1 if gamepad_input.triangle else 0
+            btn_square_depth = 1 if gamepad_input.square else 0
+            btn_l1_depth = 1 if gamepad_input.l1 else 0
+            btn_r1_depth = 1 if gamepad_input.r1 else 0
+            
+            # Calculate camera
+            ## Set camera rotation in euler angles
+            move_obj.rotation_mode = 'XYZ'
+            move_obj.rotation_euler[0] = rotationX
+            move_obj.rotation_euler[1] = rotationY
+            move_obj.rotation_euler[2] = rotationZ
 
             # Set camera translation
-            move_obj.location.x += navHorizontal
-            move_obj.location.y += navVertical
-            move_obj.location.z += navDepth
+            # move_obj.location.x += navHorizontal
+            # move_obj.location.y += navVertical
+            # move_obj.location.z += navDepth
+
+            # Move objects
+            ## Face buttons
+            gamepad_props.btn_cross.location.z = btn_cross_depth
+            gamepad_props.btn_circle.location.z = btn_circle_depth
+            gamepad_props.btn_triangle.location.z = btn_triangle_depth
+            gamepad_props.btn_square.location.z = btn_square_depth
+            ## Triggers
+            gamepad_props.btn_l1.location.z = btn_l1_depth
+            gamepad_props.btn_r1.location.z = btn_r1_depth
 
 
         return {'RUNNING_MODAL'}
@@ -277,6 +368,13 @@ class GI_ModalOperator(bpy.types.Operator):
         # Create the gamepad only when running modal
         # (only do this if you disable the global one below)
         self.gamepad = GamepadInput(int(context.scene.gamepad_props.active_gamepad))
+
+        # Save original position of objects
+        print("Saving position")
+        gamepad_props = context.scene.gamepad_props
+        move_obj = gamepad_props.analog_left
+
+        self._obj_analog_left = move_obj.location
 
         return {'RUNNING_MODAL'}
 
