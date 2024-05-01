@@ -280,6 +280,9 @@ class GI_ModalOperator(bpy.types.Operator):
     bl_label = "Gamepad Navigation"
     theta = 0
     analogMovementRate = 0.1
+    analog_frame = 0
+    btn_analog_left = False
+    btn_cross_state = False
 
     # Timer used for modal
     _timer = None
@@ -288,10 +291,11 @@ class GI_ModalOperator(bpy.types.Operator):
     _obj_analog_left = None
 
     def modal(self, context, event):
-        if event.type in {'RIGHTMOUSE', 'ESC'}:
+        current_frame = context.scene.frame_current
+        last_frame = context.scene.frame_end
+        if event.type in {'RIGHTMOUSE', 'ESC'} or current_frame >= last_frame:
             return self.cancel(context)
         if event.type == 'TIMER':
-
             camera = context.scene.camera
             gamepad_props = context.scene.gamepad_props
             
@@ -334,6 +338,14 @@ class GI_ModalOperator(bpy.types.Operator):
             btn_l1_depth = 1 if gamepad_input.l1 else 0
             btn_r1_depth = 1 if gamepad_input.r1 else 0
             
+            # Save initial position as previous frame
+            if gamepad_input.left_analog_y > 0 and not self.btn_analog_left:
+                self.btn_analog_left = True
+                move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame - 1)
+            if gamepad_input.cross and not self.btn_cross_state:
+                self.btn_cross_state = True
+                gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame - 1)
+
             # Calculate camera
             ## Set camera rotation in euler angles
             move_obj.rotation_mode = 'XYZ'
@@ -357,6 +369,27 @@ class GI_ModalOperator(bpy.types.Operator):
             gamepad_props.btn_r1.location.z = btn_r1_depth
 
 
+            # Make keyframes
+            # We do this last after all the transformations to they can be stored
+
+            # Analog left
+            if gamepad_input.left_analog_y > 0:
+                move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame)
+            elif gamepad_input.left_analog_y == 0 and self.btn_analog_left:
+                self.btn_analog_left = False
+                move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame)
+
+            # We compare the gamepad state to the internal state (so we can apply keyframes on press _and_ release)
+            # Pressed
+            if gamepad_input.cross:
+                gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame)
+            # Released
+            if not gamepad_input.cross and self.btn_cross_state:
+                self.btn_cross_state = False
+                gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame)
+
+
+
         return {'RUNNING_MODAL'}
     
     def execute(self, context):
@@ -376,6 +409,15 @@ class GI_ModalOperator(bpy.types.Operator):
 
         self._obj_analog_left = move_obj.location
 
+
+        # Save initial keyframes (needed or else it starts as moved)
+        current_frame = context.scene.frame_current
+        gamepad_props.analog_left.keyframe_insert(data_path="rotation_euler", frame=current_frame)
+        gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame)
+
+        # Start animation
+        bpy.ops.screen.animation_play()
+
         return {'RUNNING_MODAL'}
 
     def cancel(self, context):
@@ -386,6 +428,9 @@ class GI_ModalOperator(bpy.types.Operator):
         # Release gamepad class and threads
         self.gamepad.stop()
         del self.gamepad
+
+        # Cancel animation
+        bpy.ops.screen.animation_cancel()
 
         return {'FINISHED'}
 
