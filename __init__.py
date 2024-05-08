@@ -116,16 +116,12 @@ class MIDIInput():
         def print_message(midi):
             if midi.isNoteOn():
                 print('ON: ', midi.getMidiNoteName(midi.getNoteNumber()), midi.getVelocity())
-                fullNote = midi.getMidiNoteName(midi.getNoteNumber())
-                velocity = midi.getVelocity()
-                noteLetter = fullNote[:-1]
-                print("Note saving: ", noteLetter)
-                self.pressed[noteLetter] = True
-                self.velocity[noteLetter] = velocity
-                print("Note saved: ", self.pressed[noteLetter])
+                self.save_input(midi, True);
 
             elif midi.isNoteOff():
                 print('OFF:', midi.getMidiNoteName(midi.getNoteNumber()))
+                self.save_input(midi, False);
+            
             elif midi.isController():
                 print('CONTROLLER', midi.getControllerNumber(), midi.getControllerValue())
 
@@ -141,6 +137,20 @@ class MIDIInput():
                     print_message(m)
         else:
             print('NO MIDI INPUT PORTS!')
+
+    def save_input(self, midi, pressed):
+        # We grab the note data. This returns a note like C#2
+        fullNote = midi.getMidiNoteName(midi.getNoteNumber())
+        velocity = midi.getVelocity()
+
+        # We shave off the octave to focus on the base note (aka the "letter" like "C")
+        noteLetter = fullNote[:-1]
+        print("Note saving: ", noteLetter)
+
+        # Save internal input
+        self.pressed[noteLetter] = pressed
+        self.velocity[noteLetter] = velocity
+        print("Note saved: ", self.pressed[noteLetter])
 
     def _normalize_btn_bool(self, state):
         return True if state == 1 else False
@@ -167,44 +177,44 @@ class GI_SceneProperties(PropertyGroup):
         items=gamepad_items
         )
         
-    analog_left: PointerProperty(
-        name="Analog Left",
+    obj_c: PointerProperty(
+        name="C",
         description="Object to be controlled",
         type=bpy.types.Object,
         )
         
-    btn_cross: PointerProperty(
-        name="Cross button",
+    obj_d: PointerProperty(
+        name="D",
         description="Object to be controlled",
         type=bpy.types.Object,
         )
         
-    btn_circle: PointerProperty(
-        name="Circle button",
+    obj_e: PointerProperty(
+        name="E",
         description="Object to be controlled",
         type=bpy.types.Object,
         )
         
-    btn_triangle: PointerProperty(
-        name="Triangle button",
+    obj_f: PointerProperty(
+        name="F",
         description="Object to be controlled",
         type=bpy.types.Object,
         )
         
-    btn_square: PointerProperty(
-        name="Square button",
+    obj_g: PointerProperty(
+        name="G",
         description="Object to be controlled",
         type=bpy.types.Object,
         )
         
-    btn_l1: PointerProperty(
-        name="L1 button",
+    obj_a: PointerProperty(
+        name="A",
         description="Object to be controlled",
         type=bpy.types.Object,
         )
         
-    btn_r1: PointerProperty(
-        name="R1 button",
+    obj_b: PointerProperty(
+        name="B",
         description="Object to be controlled",
         type=bpy.types.Object,
         )
@@ -241,19 +251,19 @@ class GI_GamepadInputPanel(bpy.types.Panel):
 
         layout.label(text="Controls")
         row = layout.row()
-        row.prop(gamepad_props, "analog_left")
+        row.prop(gamepad_props, "obj_c")
         row = layout.row()
-        row.prop(gamepad_props, "btn_cross")
+        row.prop(gamepad_props, "obj_d")
         row = layout.row()
-        row.prop(gamepad_props, "btn_circle")
+        row.prop(gamepad_props, "obj_e")
         row = layout.row()
-        row.prop(gamepad_props, "btn_triangle")
+        row.prop(gamepad_props, "obj_f")
         row = layout.row()
-        row.prop(gamepad_props, "btn_square")
+        row.prop(gamepad_props, "obj_g")
         row = layout.row()
-        row.prop(gamepad_props, "btn_l1")
+        row.prop(gamepad_props, "obj_a")
         row = layout.row()
-        row.prop(gamepad_props, "btn_r1")
+        row.prop(gamepad_props, "obj_b")
 
 
 class GI_gamepad(bpy.types.Operator):
@@ -302,7 +312,20 @@ class GI_ModalOperator(bpy.types.Operator):
     analogMovementRate = 0.1
     analog_frame = 0
     btn_analog_left = False
-    btn_cross_state = False
+    pressed = {
+            "C": False,
+            "C#": False,
+            "D": False,
+            "D#": False,
+            "E": False,
+            "F": False,
+            "F#": False,
+            "G": False,
+            "G#": False,
+            "A": False,
+            "A#": False,
+            "B": False,
+        }
 
     # Timer used for modal
     _timer = None
@@ -316,11 +339,8 @@ class GI_ModalOperator(bpy.types.Operator):
         if event.type in {'RIGHTMOUSE', 'ESC'} or current_frame >= last_frame:
             return self.cancel(context)
         if event.type == 'TIMER':
-            camera = context.scene.camera
             gamepad_props = context.scene.gamepad_props
             
-            move_obj = gamepad_props.analog_left
-
             midi_input = self.midi_input
             rotationX = 0.0
             rotationY = 0.0
@@ -341,15 +361,15 @@ class GI_ModalOperator(bpy.types.Operator):
             #     navVertical = self.analogMovementRate
 
             ## Buttons
-            # btn_cross_depth = 1 if gamepad_input.cross else 0
+            btn_c_depth = 1 if midi_input.pressed["C"] else 0
             
             # Save initial position as previous frame
             # if gamepad_input.left_analog_y > 0 and not self.btn_analog_left:
             #     self.btn_analog_left = True
             #     move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame - 1)
-            # if gamepad_input.cross and not self.btn_cross_state:
-            #     self.btn_cross_state = True
-            #     gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame - 1)
+            if midi_input.pressed["C"] and not self.pressed["C"]:
+                self.pressed["C"] = True
+                gamepad_props.obj_c.keyframe_insert(data_path="location", frame=current_frame - 1)
 
             # Rotate object
             ## Set object rotation in euler angles
@@ -360,7 +380,7 @@ class GI_ModalOperator(bpy.types.Operator):
 
             # Move objects
             ## Face buttons
-            # gamepad_props.btn_cross.location.z = btn_cross_depth
+            gamepad_props.obj_c.location.z = btn_c_depth
 
 
             # Make keyframes
@@ -375,12 +395,12 @@ class GI_ModalOperator(bpy.types.Operator):
 
             # We compare the gamepad state to the internal state (so we can apply keyframes on press _and_ release)
             # Pressed
-            # if gamepad_input.cross:
-            #     gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame)
-            # # Released
-            # if not gamepad_input.cross and self.btn_cross_state:
-            #     self.btn_cross_state = False
-            #     gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame)
+            if midi_input.pressed["C"]:
+                gamepad_props.obj_c.keyframe_insert(data_path="location", frame=current_frame)
+            # Released
+            if not midi_input.pressed["C"] and self.pressed["C"]:
+                self.pressed["C"] = False
+                gamepad_props.obj_c.keyframe_insert(data_path="location", frame=current_frame)
 
 
 
