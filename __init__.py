@@ -54,46 +54,61 @@ def lerp( a, b, alpha ):
 
 sync_enabled = False
 
-class GamepadInput():
+
+def defaultInput():
+    return {
+        "pressed": False,
+        "velocity": 0,
+    }
+
+class MIDIInput():
     def __init__(self) -> None:
+
         # Initialize props to track gamepad input
-        self.up = False
-        self.down = False
-        self.left = False
-        self.right = False
-        self.left_analog_x = 0.0
-        self.left_analog_y = 0.0
-        self.right_analog_x = 0.0
-        self.right_analog_y = 0.0
-        self.l1 = False
-        self.l2 = 0.0
-        self.r1 = False
-        self.r2 = 0.0
-        self.cross = False #south
-        self.square = False #west
-        self.triangle = False #north
-        self.circle = False #east
-        self.start = False # I refuse to acknowledge "option". start for life.
-        self.select = False # aka share
-        self.home = False
-        self.touchpad = False
+        self.pressed = {
+            "C": False,
+            "C#": False,
+            "D": False,
+            "D#": False,
+            "E": False,
+            "F": False,
+            "F#": False,
+            "G": False,
+            "G#": False,
+            "A": False,
+            "A#": False,
+            "B": False,
+        }
+        self.velocity = {
+            "C": 0,
+            "C#": 0,
+            "D": 0,
+            "D#": 0,
+            "E": 0,
+            "F": 0,
+            "F#": 0,
+            "G": 0,
+            "G#": 0,
+            "A": 0,
+            "A#": 0,
+            "B": 0,
+        }
 
         # Setup threads
         self._thread_flag= threading.Event() # used to pause thread
-        self._thread= threading.Thread(target=self._sync_gamepad, args=(self._thread_flag,))
+        self._thread= threading.Thread(target=self._sync_midi, args=(self._thread_flag,))
         self._thread.daemon = True # used to kill thread if Blender closes
         self._thread.start()
-
 
     def stop(self):
         self._thread_flag.set()
 
-    def _sync_gamepad(self, thread_flag):
+    def _sync_midi(self, thread_flag):
         # Create "infinite loop" while thread is flagged to run
         while not thread_flag.is_set():
-            self._sync_gamepad_data()
+            self._sync_midi_data()
     
-    def _sync_gamepad_data(self):
+    def _sync_midi_data(self):
         import rtmidi
 
         midiin = rtmidi.RtMidiIn()
@@ -101,6 +116,14 @@ class GamepadInput():
         def print_message(midi):
             if midi.isNoteOn():
                 print('ON: ', midi.getMidiNoteName(midi.getNoteNumber()), midi.getVelocity())
+                fullNote = midi.getMidiNoteName(midi.getNoteNumber())
+                velocity = midi.getVelocity()
+                noteLetter = fullNote[:-1]
+                print("Note saving: ", noteLetter)
+                self.pressed[noteLetter] = True
+                self.velocity[noteLetter] = velocity
+                print("Note saved: ", self.pressed[noteLetter])
+
             elif midi.isNoteOff():
                 print('OFF:', midi.getMidiNoteName(midi.getNoteNumber()))
             elif midi.isController():
@@ -298,7 +321,7 @@ class GI_ModalOperator(bpy.types.Operator):
             
             move_obj = gamepad_props.analog_left
 
-            gamepad_input = self.gamepad
+            midi_input = self.midi_input
             rotationX = 0.0
             rotationY = 0.0
             rotationZ = 0.0
@@ -371,7 +394,7 @@ class GI_ModalOperator(bpy.types.Operator):
 
         # Create the gamepad only when running modal
         # (only do this if you disable the global one below)
-        self.gamepad = GamepadInput()
+        self.midi_input = MIDIInput()
 
         # Save original position of objects
         # print("Saving position")
@@ -393,8 +416,8 @@ class GI_ModalOperator(bpy.types.Operator):
         wm.event_timer_remove(self._timer)
 
         # Release gamepad class and threads
-        self.gamepad.stop()
-        del self.gamepad
+        self.midi_input.stop()
+        del self.midi_input
 
         # Cancel animation
         bpy.ops.screen.animation_cancel()
