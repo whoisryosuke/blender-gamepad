@@ -171,9 +171,9 @@ def gamepad_items(self, context):
 # UI properties
 class GI_SceneProperties(PropertyGroup):
         
-    active_gamepad: EnumProperty(
-        name="Active Gamepad",
-        description="Gamepad used for control",
+    active_midi: EnumProperty(
+        name="Active MIDI",
+        description="MIDI used for control",
         items=gamepad_items
         )
         
@@ -218,12 +218,42 @@ class GI_SceneProperties(PropertyGroup):
         description="Object to be controlled",
         type=bpy.types.Object,
         )
+        
+    obj_csharp: PointerProperty(
+        name="C#",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
+        
+    obj_dsharp: PointerProperty(
+        name="D#",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
+    
+    obj_fsharp: PointerProperty(
+        name="F#",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
+    
+    obj_gsharp: PointerProperty(
+        name="G#",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
+    
+    obj_asharp: PointerProperty(
+        name="A#",
+        description="Object to be controlled",
+        type=bpy.types.Object,
+        )
 
 # UI Panel
 class GI_GamepadInputPanel(bpy.types.Panel):
     """Creates a Panel in the scene context of the properties editor"""
-    bl_category = "Gamepad"
-    bl_label = "Gamepad Settings"
+    bl_category = "MIDI"
+    bl_label = "MIDI Settings"
     bl_idname = "SCENE_PT_gamepad"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -238,16 +268,12 @@ class GI_GamepadInputPanel(bpy.types.Panel):
         row = layout.row()
         row.operator("wm.install_midi")
         
-        # TODO: Specify active gamepad from list
-        layout.label(text="Select gamepad")
+        # TODO: Specify active MIDI from list
+        # layout.label(text="Select MIDI")
         # row = layout.row()
         # row.operator("wm.refresh_gamepads")
-        row = layout.row()
-        row.prop(gamepad_props, "active_gamepad")
-
-        layout.label(text="Debug")
-        row = layout.row()
-        row.operator("wm.test_gamepad")
+        # row = layout.row()
+        # row.prop(gamepad_props, "active_midi")
 
         layout.label(text="Controls")
         row = layout.row()
@@ -263,26 +289,17 @@ class GI_GamepadInputPanel(bpy.types.Panel):
         row = layout.row()
         row.prop(gamepad_props, "obj_a")
         row = layout.row()
-        row.prop(gamepad_props, "obj_b")
+        row.prop(gamepad_props, "obj_csharp")
+        row = layout.row()
+        row.prop(gamepad_props, "obj_dsharp")
+        row = layout.row()
+        row.prop(gamepad_props, "obj_fsharp")
+        row = layout.row()
+        row.prop(gamepad_props, "obj_gsharp")
+        row = layout.row()
+        row.prop(gamepad_props, "obj_asharp")
 
 
-class GI_gamepad(bpy.types.Operator):
-    """Test function for gamepads"""
-    bl_idname = "wm.test_gamepad"
-    bl_label = "Test Gamepad"
-    bl_description = "Vibrates active gamepad and shows data in console"
-
-    def execute(self, context: bpy.types.Context):
-
-        print("Finding gamepads...")
-        current_gamepad = context.scene.gamepad_props.active_gamepad
-        print("active gamepad", current_gamepad)
-        try:
-            devices.gamepads[int(current_gamepad)].set_vibration(0.5, 0.5, 420)
-        except: 
-            print("Couldn't vibrate gamepad.")
-
-        return {"FINISHED"}
 
 class GI_install_midi(bpy.types.Operator):
     """Test function for gamepads"""
@@ -305,9 +322,9 @@ class GI_install_midi(bpy.types.Operator):
 
 
 class GI_ModalOperator(bpy.types.Operator):
-    """Gamepad syncing and camera movement"""
+    """Syncs MIDI input to object animation"""
     bl_idname = "object.modal_operator"
-    bl_label = "Gamepad Navigation"
+    bl_label = "MIDI Navigation"
     theta = 0
     analogMovementRate = 0.1
     analog_frame = 0
@@ -342,70 +359,68 @@ class GI_ModalOperator(bpy.types.Operator):
             gamepad_props = context.scene.gamepad_props
             
             midi_input = self.midi_input
-            rotationX = 0.0
-            rotationY = 0.0
-            rotationZ = 0.0
-            navHorizontal = 0.0
-            navVertical = 0.0
-            navDepth = 0.0
-            btn_cross_depth = 0.0
-            btn_circle_depth = 0.0
-            btn_triangle_depth = 0.0
-            btn_square_depth = 0.0
-            btn_l1_depth = 0.0
-            btn_r1_depth = 0.0
-
-            # Get input
-            ## D-pad
-            # if gamepad_input.up:
-            #     navVertical = self.analogMovementRate
 
             ## Buttons
-            btn_c_depth = 1 if midi_input.pressed["C"] else 0
-            
-            # Save initial position as previous frame
-            # if gamepad_input.left_analog_y > 0 and not self.btn_analog_left:
-            #     self.btn_analog_left = True
-            #     move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame - 1)
-            if midi_input.pressed["C"] and not self.pressed["C"]:
-                self.pressed["C"] = True
-                gamepad_props.obj_c.keyframe_insert(data_path="location", frame=current_frame - 1)
-
-            # Rotate object
-            ## Set object rotation in euler angles
-            # move_obj.rotation_mode = 'XYZ'
-            # move_obj.rotation_euler[0] = rotationX
-            # move_obj.rotation_euler[1] = rotationY
-            # move_obj.rotation_euler[2] = rotationZ
-
-            # Move objects
-            ## Face buttons
-            gamepad_props.obj_c.location.z = btn_c_depth
-
-
-            # Make keyframes
-            # We do this last after all the transformations to they can be stored
-
-            # Analog left
-            # if gamepad_input.left_analog_y > 0:
-            #     move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame)
-            # elif gamepad_input.left_analog_y == 0 and self.btn_analog_left:
-            #     self.btn_analog_left = False
-            #     move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame)
-
-            # We compare the gamepad state to the internal state (so we can apply keyframes on press _and_ release)
-            # Pressed
-            if midi_input.pressed["C"]:
-                gamepad_props.obj_c.keyframe_insert(data_path="location", frame=current_frame)
-            # Released
-            if not midi_input.pressed["C"] and self.pressed["C"]:
-                self.pressed["C"] = False
-                gamepad_props.obj_c.keyframe_insert(data_path="location", frame=current_frame)
-
-
+            for noteLetter in self.pressed: 
+                self.move_note(midi_input, gamepad_props, noteLetter, current_frame)
 
         return {'RUNNING_MODAL'}
     
+    def move_note(self, midi_input, gamepad_props, noteLetter, current_frame):
+        ## Buttons
+        btn_c_depth = 1 if midi_input.pressed[noteLetter] else 0
+        move_obj = self.get_note_obj(gamepad_props, noteLetter)
+
+        if move_obj == None:
+            return;
+        
+        # Save initial position as previous frame
+        if midi_input.pressed[noteLetter] and not self.pressed[noteLetter]:
+            self.pressed[noteLetter] = True
+            move_obj.keyframe_insert(data_path="location", frame=current_frame - 1)
+
+        # Move objects
+        ## Face buttons
+        move_obj.location.z = btn_c_depth
+
+        # Make keyframes
+        # We do this last after all the transformations to they can be stored
+
+        # We compare the gamepad state to the internal state (so we can apply keyframes on press _and_ release)
+        # Pressed
+        if midi_input.pressed[noteLetter]:
+            move_obj.keyframe_insert(data_path="location", frame=current_frame)
+        # Released
+        if not midi_input.pressed[noteLetter] and self.pressed[noteLetter]:
+            self.pressed[noteLetter] = False
+            move_obj.keyframe_insert(data_path="location", frame=current_frame)
+
+    def get_note_obj(self, gamepad_props, noteLetter):
+        if noteLetter == "C":
+            return gamepad_props.obj_c
+        if noteLetter == "D":
+            return gamepad_props.obj_d
+        if noteLetter == "E":
+            return gamepad_props.obj_e
+        if noteLetter == "F":
+            return gamepad_props.obj_f
+        if noteLetter == "G":
+            return gamepad_props.obj_g
+        if noteLetter == "A":
+            return gamepad_props.obj_a
+        if noteLetter == "B":
+            return gamepad_props.obj_b
+        if noteLetter == "C#":
+            return gamepad_props.obj_csharp
+        if noteLetter == "D#":
+            return gamepad_props.obj_dsharp
+        if noteLetter == "F#":
+            return gamepad_props.obj_fsharp
+        if noteLetter == "G#":
+            return gamepad_props.obj_gsharp
+        if noteLetter == "A#":
+            return gamepad_props.obj_asharp
+
     def execute(self, context):
         # Create the timer
         wm = context.window_manager
@@ -445,17 +460,16 @@ class GI_ModalOperator(bpy.types.Operator):
         return {'FINISHED'}
 
 # Menu item
-def GI_gamepad_menu_item(self, context):
-    self.layout.operator(GI_ModalOperator.bl_idname, text="Enable Gamepad Navigation")
+def GI_midi_menu_item(self, context):
+    self.layout.operator(GI_ModalOperator.bl_idname, text="Enable MIDI Recording")
 
 # Register and add to the object menu (required to also use F3 search "Modal Operator" for quick access).
-bpy.types.VIEW3D_MT_object.append(GI_gamepad_menu_item)
+bpy.types.VIEW3D_MT_object.append(GI_midi_menu_item)
 
 # Load/unload addon into Blender
 classes = (
     GI_SceneProperties,
     GI_GamepadInputPanel,
-    GI_gamepad,
     GI_ModalOperator,
     GI_install_midi,
 )
