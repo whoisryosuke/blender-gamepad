@@ -40,6 +40,9 @@ import threading
 import numpy
 import math
 import mathutils
+import subprocess
+import sys
+import os
 
 def lerp( a, b, alpha ):
     return a + alpha * ( b - a )
@@ -52,7 +55,7 @@ def lerp( a, b, alpha ):
 sync_enabled = False
 
 class GamepadInput():
-    def __init__(self, index) -> None:
+    def __init__(self) -> None:
         # Initialize props to track gamepad input
         self.up = False
         self.down = False
@@ -75,8 +78,6 @@ class GamepadInput():
         self.home = False
         self.touchpad = False
 
-        self.gamepad_index = index
-        
         # Setup threads
         self._thread_flag= threading.Event() # used to pause thread
         self._thread= threading.Thread(target=self._sync_gamepad, args=(self._thread_flag,))
@@ -93,56 +94,30 @@ class GamepadInput():
             self._sync_gamepad_data()
     
     def _sync_gamepad_data(self):
-        # Sync gamepad input
-        gamepad = devices.gamepads[self.gamepad_index]
-        events = gamepad.read()
-        for event in events:
-            print(gamepad.get_char_name(), event.ev_type, event.code, event.state)
-            match event.code:
-                case "ABS_HAT0Y":
-                    if(event.state == -1):
-                        self.up = True
-                    elif(event.state == 1):
-                        self.down = True
-                    elif(event.state == 0):
-                        self.up = False
-                        self.down = False
-                case "ABS_HAT0X":
-                    if(event.state == -1):
-                        self.left = True
-                    elif(event.state == 1):
-                        self.right = True
-                    elif(event.state == 0):
-                        self.left = False
-                        self.right = False
-                case "ABS_Y":
-                    self.left_analog_x = self._normalize_btn_analog(event.state)
-                case "ABS_X":
-                    self.left_analog_y = self._normalize_btn_analog(event.state)
-                case "ABS_RY":
-                    self.right_analog_x = self._normalize_btn_analog(event.state)
-                case "ABS_RX":
-                    self.right_analog_y = self._normalize_btn_analog(event.state)
-                case "ABS_Z":
-                    self.l2 = self._normalize_btn_trigger(event.state)
-                case "ABS_RZ":
-                    self.r2 = self._normalize_btn_trigger(event.state)
-                case "BTN_SOUTH":
-                    self.cross = self._normalize_btn_bool(event.state)
-                case "BTN_NORTH":
-                    self.triangle = self._normalize_btn_bool(event.state)
-                case "BTN_WEST":
-                    self.square = self._normalize_btn_bool(event.state)
-                case "BTN_EAST":
-                    self.circle = self._normalize_btn_bool(event.state)
-                case "BTN_TL":
-                    self.l1 = self._normalize_btn_bool(event.state)
-                case "BTN_TR":
-                    self.r1 = self._normalize_btn_bool(event.state)
-                case "BTN_SELECT":
-                    self.start = self._normalize_btn_bool(event.state)
-                case "BTN_START":
-                    self.select = self._normalize_btn_bool(event.state)
+        import rtmidi
+
+        midiin = rtmidi.RtMidiIn()
+
+        def print_message(midi):
+            if midi.isNoteOn():
+                print('ON: ', midi.getMidiNoteName(midi.getNoteNumber()), midi.getVelocity())
+            elif midi.isNoteOff():
+                print('OFF:', midi.getMidiNoteName(midi.getNoteNumber()))
+            elif midi.isController():
+                print('CONTROLLER', midi.getControllerNumber(), midi.getControllerValue())
+
+        ports = range(midiin.getPortCount())
+        if ports:
+            for i in ports:
+                print(midiin.getPortName(i))
+            print("Opening port 0!") 
+            midiin.openPort(0)
+            while True:
+                m = midiin.getMessage(250) # some timeout in ms
+                if m:
+                    print_message(m)
+        else:
+            print('NO MIDI INPUT PORTS!')
 
     def _normalize_btn_bool(self, state):
         return True if state == 1 else False
@@ -226,6 +201,9 @@ class GI_GamepadInputPanel(bpy.types.Panel):
 
         scene = context.scene
         gamepad_props = scene.gamepad_props
+
+        row = layout.row()
+        row.operator("wm.install_midi")
         
         # TODO: Specify active gamepad from list
         layout.label(text="Select gamepad")
@@ -273,6 +251,25 @@ class GI_gamepad(bpy.types.Operator):
 
         return {"FINISHED"}
 
+class GI_install_midi(bpy.types.Operator):
+    """Test function for gamepads"""
+    bl_idname = "wm.install_midi"
+    bl_label = "Install dependencies"
+    bl_description = "Installs necessary Python modules for MIDI input"
+
+    def execute(self, context: bpy.types.Context):
+
+        print("Installing MIDI library...") 
+        python_exe = os.path.join(sys.prefix, 'bin', 'python.exe')
+        target = os.path.join(sys.prefix, 'lib', 'site-packages')
+
+        subprocess.call([python_exe, '-m', 'ensurepip'])
+        subprocess.call([python_exe, '-m', 'pip', 'install', '--upgrade', 'pip'])
+
+        subprocess.call([python_exe, '-m', 'pip', 'install', '--upgrade', 'rtmidi', '-t', target])
+
+        return {"FINISHED"}
+
 
 class GI_ModalOperator(bpy.types.Operator):
     """Gamepad syncing and camera movement"""
@@ -317,76 +314,50 @@ class GI_ModalOperator(bpy.types.Operator):
 
             # Get input
             ## D-pad
-            if gamepad_input.up:
-                navVertical = self.analogMovementRate
-            if gamepad_input.down:
-                navVertical = -self.analogMovementRate
-            if gamepad_input.left:
-                navHorizontal = self.analogMovementRate
-            if gamepad_input.right:
-                navHorizontal = -self.analogMovementRate
-            
-            ## Left analog stick
-            rotationY = math.radians(gamepad_input.left_analog_y * 30)
-            rotationX = math.radians(gamepad_input.left_analog_x * 30)
+            # if gamepad_input.up:
+            #     navVertical = self.analogMovementRate
 
             ## Buttons
-            btn_cross_depth = 1 if gamepad_input.cross else 0
-            btn_circle_depth = 1 if gamepad_input.circle else 0
-            btn_triangle_depth = 1 if gamepad_input.triangle else 0
-            btn_square_depth = 1 if gamepad_input.square else 0
-            btn_l1_depth = 1 if gamepad_input.l1 else 0
-            btn_r1_depth = 1 if gamepad_input.r1 else 0
+            # btn_cross_depth = 1 if gamepad_input.cross else 0
             
             # Save initial position as previous frame
-            if gamepad_input.left_analog_y > 0 and not self.btn_analog_left:
-                self.btn_analog_left = True
-                move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame - 1)
-            if gamepad_input.cross and not self.btn_cross_state:
-                self.btn_cross_state = True
-                gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame - 1)
+            # if gamepad_input.left_analog_y > 0 and not self.btn_analog_left:
+            #     self.btn_analog_left = True
+            #     move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame - 1)
+            # if gamepad_input.cross and not self.btn_cross_state:
+            #     self.btn_cross_state = True
+            #     gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame - 1)
 
-            # Calculate camera
-            ## Set camera rotation in euler angles
-            move_obj.rotation_mode = 'XYZ'
-            move_obj.rotation_euler[0] = rotationX
-            move_obj.rotation_euler[1] = rotationY
-            move_obj.rotation_euler[2] = rotationZ
-
-            # Set camera translation
-            # move_obj.location.x += navHorizontal
-            # move_obj.location.y += navVertical
-            # move_obj.location.z += navDepth
+            # Rotate object
+            ## Set object rotation in euler angles
+            # move_obj.rotation_mode = 'XYZ'
+            # move_obj.rotation_euler[0] = rotationX
+            # move_obj.rotation_euler[1] = rotationY
+            # move_obj.rotation_euler[2] = rotationZ
 
             # Move objects
             ## Face buttons
-            gamepad_props.btn_cross.location.z = btn_cross_depth
-            gamepad_props.btn_circle.location.z = btn_circle_depth
-            gamepad_props.btn_triangle.location.z = btn_triangle_depth
-            gamepad_props.btn_square.location.z = btn_square_depth
-            ## Triggers
-            gamepad_props.btn_l1.location.z = btn_l1_depth
-            gamepad_props.btn_r1.location.z = btn_r1_depth
+            # gamepad_props.btn_cross.location.z = btn_cross_depth
 
 
             # Make keyframes
             # We do this last after all the transformations to they can be stored
 
             # Analog left
-            if gamepad_input.left_analog_y > 0:
-                move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame)
-            elif gamepad_input.left_analog_y == 0 and self.btn_analog_left:
-                self.btn_analog_left = False
-                move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame)
+            # if gamepad_input.left_analog_y > 0:
+            #     move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame)
+            # elif gamepad_input.left_analog_y == 0 and self.btn_analog_left:
+            #     self.btn_analog_left = False
+            #     move_obj.keyframe_insert(data_path="rotation_euler", frame=current_frame)
 
             # We compare the gamepad state to the internal state (so we can apply keyframes on press _and_ release)
             # Pressed
-            if gamepad_input.cross:
-                gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame)
-            # Released
-            if not gamepad_input.cross and self.btn_cross_state:
-                self.btn_cross_state = False
-                gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame)
+            # if gamepad_input.cross:
+            #     gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame)
+            # # Released
+            # if not gamepad_input.cross and self.btn_cross_state:
+            #     self.btn_cross_state = False
+            #     gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame)
 
 
 
@@ -400,20 +371,16 @@ class GI_ModalOperator(bpy.types.Operator):
 
         # Create the gamepad only when running modal
         # (only do this if you disable the global one below)
-        self.gamepad = GamepadInput(int(context.scene.gamepad_props.active_gamepad))
+        self.gamepad = GamepadInput()
 
         # Save original position of objects
-        print("Saving position")
-        gamepad_props = context.scene.gamepad_props
-        move_obj = gamepad_props.analog_left
-
-        self._obj_analog_left = move_obj.location
-
+        # print("Saving position")
+        # gamepad_props = context.scene.gamepad_props
 
         # Save initial keyframes (needed or else it starts as moved)
-        current_frame = context.scene.frame_current
-        gamepad_props.analog_left.keyframe_insert(data_path="rotation_euler", frame=current_frame)
-        gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame)
+        # current_frame = context.scene.frame_current
+        # gamepad_props.analog_left.keyframe_insert(data_path="rotation_euler", frame=current_frame)
+        # gamepad_props.btn_cross.keyframe_insert(data_path="location", frame=current_frame)
 
         # Start animation
         bpy.ops.screen.animation_play()
@@ -447,6 +414,7 @@ classes = (
     GI_GamepadInputPanel,
     GI_gamepad,
     GI_ModalOperator,
+    GI_install_midi,
 )
 
 def register():
