@@ -154,13 +154,52 @@ class GI_SceneProperties(PropertyGroup):
         description="Gamepad used for control",
         items=gamepad_items
         )
+    
+    # Objects to control
+    obj_player: PointerProperty(
+        name="Player Rig",
+        description="The rig that animation actions will be assigned to",
+        type=bpy.types.Object,
+        )
+    
+    # Actions for objects
+    action_movement: PointerProperty(
+        name="Movement",
+        description="Action for Left Analog or Movement Buttons",
+        type=bpy.types.Action,
+        )
+    action_btn_cross: PointerProperty(
+        name="Cross",
+        description="Action for Cross (PS) / B (Nin) / A (Xbox)",
+        type=bpy.types.Action,
+        )
+    action_btn_circle: PointerProperty(
+        name="Circle",
+        description="Action for Circle (PS) / A (Nin) / B (Xbox)",
+        type=bpy.types.Action,
+        )
+    action_btn_triangle: PointerProperty(
+        name="Triangle",
+        description="Action for Triangle (PS) / X (Nin) / Y (Xbox)",
+        type=bpy.types.Action,
+        )
+    action_btn_square: PointerProperty(
+        name="Square",
+        description="Action for Square (PS) / Y (Nin) / X (Xbox)",
+        type=bpy.types.Action,
+        )
+    action_btn_start: PointerProperty(
+        name="Start",
+        description="Action for Options (PS) / Start (Nin) / Start (Xbox)",
+        type=bpy.types.Action,
+        )
 
 # UI Panel
 class GI_GamepadInputPanel(bpy.types.Panel):
     """Creates a Panel in the scene context of the properties editor"""
     bl_category = "Gamepad"
     bl_label = "Gamepad Settings"
-    bl_idname = "SCENE_PT_gamepad"
+    bl_idname = "SCENE_PT_gamepad_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     # bl_context = "output"
@@ -181,6 +220,26 @@ class GI_GamepadInputPanel(bpy.types.Panel):
         layout.label(text="Debug")
         row = layout.row()
         row.operator("wm.test_gamepad")
+        row = layout.row()
+        row.operator("object.start_gamepad_sync")
+
+        # Objects
+        row = layout.row()
+        row.prop(gamepad_props, "obj_player")
+
+        # Actions
+        row = layout.row()
+        row.prop(gamepad_props, "action_movement")
+        row = layout.row()
+        row.prop(gamepad_props, "action_btn_cross")
+        row = layout.row()
+        row.prop(gamepad_props, "action_btn_circle")
+        row = layout.row()
+        row.prop(gamepad_props, "action_btn_triangle")
+        row = layout.row()
+        row.prop(gamepad_props, "action_btn_square")
+        row = layout.row()
+        row.prop(gamepad_props, "action_btn_start")
 
 
 class GI_gamepad(bpy.types.Operator):
@@ -202,14 +261,50 @@ class GI_gamepad(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def create_animation_strip(player, current_frame, action):
+    # Make sure we create a "slot" for animation data - if it doesn't exist we get errors
+    if player.animation_data is None:
+        player.animation_data_create()
+
+    # Create new animation track ("NLA Track")
+    new_track = player.animation_data.nla_tracks.new()
+    strip_name = "cross.001"
+
+    # Create new strip on that track and add action to it
+    new_strip = new_track.strips.new(strip_name, current_frame, action)
+    # We set extrapolation mode to NOTHING so it keeps playing (default is "HOLD" - freezing anim)
+    new_strip.extrapolation = 'NOTHING'
+    new_strip.blend_in = 1.2
+    new_strip.blend_out = 1.2
+
+    return new_strip
+
 class GI_ModalOperator(bpy.types.Operator):
     """Gamepad syncing and camera movement"""
-    bl_idname = "object.modal_operator"
+    bl_idname = "object.start_gamepad_sync"
     bl_label = "Gamepad Navigation"
     theta = 0
     analogMovementRate = 0.1
+    jump_rate = 0.5
 
     _timer = None
+
+    is_moving = False
+    movement_strip = None
+    btn_cross = False
+    btn_cross_strip = None
+    btn_circle = False
+    btn_circle_strip = None
+
+
+    def get_num_repeat(self, strip, current_frame):
+        action_frame_count = strip.frame_end - strip.frame_start
+        strip_frame_start = strip.frame_start
+        check_frame_start = strip_frame_start + action_frame_count
+        total_repeat_frames = current_frame - check_frame_start
+        num_repeats = total_repeat_frames / action_frame_count
+        
+        return num_repeats
 
     def modal(self, context, event):
         if event.type in {'RIGHTMOUSE', 'ESC'}:
@@ -217,38 +312,102 @@ class GI_ModalOperator(bpy.types.Operator):
         if event.type == 'TIMER':
 
             camera = context.scene.camera
+            current_frame = context.scene.frame_current
+            last_frame = context.scene.frame_end
+            fps = context.scene.render.fps
             # gamepad_input = context.scene.gamepad_input
             gamepad_input = self.gamepad
+
+            # Props
+            gamepad_props = context.scene.gamepad_props
+            player = gamepad_props.obj_player
+            action_btn_cross = gamepad_props.action_btn_cross
+            action_btn_circle = gamepad_props.action_btn_circle
+            action_movement = gamepad_props.action_movement
+
+            # Local state
             rotationX = 0.0
             rotationY = 0.0
             rotationZ = 0.0
             navHorizontal = 0.0
             navVertical = 0.0
-            navDepth = 0.0
+            is_jumping = gamepad_input.cross and not self.btn_cross
+            is_landing = not gamepad_input.cross and self.btn_cross
 
             if gamepad_input.up:
-                navVertical = self.analogMovementRate
-                print("[GAMEPAD] Pressed up")
-            if gamepad_input.down:
                 navVertical = -self.analogMovementRate
-                print("[GAMEPAD] Pressed down")
+            if gamepad_input.down:
+                navVertical = self.analogMovementRate
             if gamepad_input.left:
                 navHorizontal = self.analogMovementRate
-                print("[GAMEPAD] Pressed left")
             if gamepad_input.right:
                 navHorizontal = -self.analogMovementRate
-                print("[GAMEPAD] Pressed right")
+            if is_jumping:
+                print("Jumping!")
+                player.keyframe_insert(data_path="location", frame=current_frame - fps/10)
+                player.location.z += self.jump_rate
+            if is_landing:
+                player.keyframe_insert(data_path="location", frame=current_frame - fps/10)
+                player.location.z -= self.jump_rate
             
             # Set camera rotation in euler angles
-            camera.rotation_mode = 'XYZ'
-            camera.rotation_euler[0] += rotationX
-            camera.rotation_euler[1] += rotationY
-            camera.rotation_euler[2] += rotationZ
+            # camera.rotation_mode = 'XYZ'
+            # camera.rotation_euler[0] += rotationX
+            # camera.rotation_euler[1] += rotationY
+            # camera.rotation_euler[2] += rotationZ
 
             # Set camera translation
-            camera.location.x += navHorizontal
-            camera.location.y += navVertical
-            camera.location.z += navDepth
+            player.location.x += navHorizontal
+            player.location.y += navVertical
+
+            # Not moving? Reset flag.
+            if navHorizontal is 0.0 and navVertical is 0.0 and self.is_moving:
+                self.is_moving = False
+
+                # Update the last movement to repeat until this moment
+                num_repeats = self.get_num_repeat(self.movement_strip, current_frame)
+                self.movement_strip.repeat += num_repeats
+
+            # Moving? 
+            if navHorizontal != 0.0 or navVertical != 0.0 and not self.is_moving:
+                self.is_moving = True
+
+                # Create new strip on that track and add action to it
+                self.movement_strip = create_animation_strip(player, current_frame, action_movement)
+                
+
+            # Save keyframes for movement
+            if self.is_moving or is_jumping or is_landing:
+                player.keyframe_insert(data_path="location", frame=current_frame)
+
+            # Handle key presses
+            # Cross
+            if gamepad_input.cross and not self.btn_cross:
+                # Update local state so we only assign action once per press (unless you want hold...)
+                self.btn_cross = True
+
+                self.btn_cross_strip = create_animation_strip(player, current_frame, action_btn_cross)
+
+            if not gamepad_input.cross and self.btn_cross:
+                # Update local state so we only assign action once per press (unless you want hold...)
+                self.btn_cross = False
+                num_repeats = self.get_num_repeat(self.btn_cross_strip, current_frame)
+                self.btn_cross_strip.repeat += num_repeats
+
+            # Circle
+            if gamepad_input.circle and not self.btn_circle:
+                # Update local state so we only assign action once per press (unless you want hold...)
+                self.btn_circle = True
+
+                self.btn_circle_strip = create_animation_strip(player, current_frame, action_btn_circle)
+
+            if not gamepad_input.circle and self.btn_circle:
+                # Update local state so we only assign action once per press (unless you want hold...)
+                self.btn_circle = False
+                num_repeats = self.get_num_repeat(self.btn_circle_strip, current_frame)
+                self.btn_circle_strip.repeat += num_repeats
+
+
 
 
         return {'RUNNING_MODAL'}
@@ -263,6 +422,17 @@ class GI_ModalOperator(bpy.types.Operator):
         # (only do this if you disable the global one below)
         self.gamepad = GamepadInput(int(context.scene.gamepad_props.active_gamepad))
 
+        # Save original position of objects
+        print("Saving position")
+        player = context.scene.gamepad_props.obj_player
+
+        # Save initial keyframes (needed or else it starts as moved)
+        current_frame = context.scene.frame_current
+        player.keyframe_insert(data_path="location", frame=current_frame)
+
+        # Start animation
+        bpy.ops.screen.animation_play()
+
         return {'RUNNING_MODAL'}
 
     def cancel(self, context):
@@ -273,6 +443,9 @@ class GI_ModalOperator(bpy.types.Operator):
         # Release gamepad class and threads
         self.gamepad.stop()
         del self.gamepad
+
+        # Cancel animation
+        bpy.ops.screen.animation_cancel()
 
         return {'FINISHED'}
 
